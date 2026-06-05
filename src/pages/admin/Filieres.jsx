@@ -7,7 +7,7 @@ export default function Filieres() {
   const [error, setError] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [form, setForm] = useState({ name: '', description: '' })
+  const [form, setForm] = useState({ code: '', name: '', description: '' })
 
   const fetchFilieres = async () => {
     try {
@@ -25,13 +25,13 @@ export default function Filieres() {
 
   const openCreate = () => {
     setEditing(null)
-    setForm({ name: '', description: '' })
+    setForm({ code: '', name: '', description: '' })
     setShowModal(true)
   }
 
   const openEdit = (f) => {
     setEditing(f)
-    setForm({ name: f.name, description: f.description || '' })
+    setForm({ code: f.code, name: f.name, description: f.description || '' })
     setShowModal(true)
   }
 
@@ -83,16 +83,20 @@ export default function Filieres() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
               <tr>
+                <th className="text-start px-4 py-3 font-medium">Code</th>
                 <th className="text-start px-4 py-3 font-medium">Nom</th>
                 <th className="text-start px-4 py-3 font-medium">Description</th>
+                <th className="text-start px-4 py-3 font-medium">Responsable</th>
                 <th className="text-end px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filieres.map((f) => (
                 <tr key={f.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-mono text-sm text-gray-900">{f.code}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{f.name}</td>
                   <td className="px-4 py-3 text-gray-500">{f.description || '—'}</td>
+                  <td className="px-4 py-3 text-gray-500">{f.responsable ? `${f.responsable.user.firstName} ${f.responsable.user.lastName}` : '—'}</td>
                   <td className="px-4 py-3 text-end space-x-2">
                     <button onClick={() => openEdit(f)} className="text-blue-600 hover:text-blue-800 text-sm">Modifier</button>
                     <button onClick={() => handleDelete(f.id)} className="text-red-600 hover:text-red-800 text-sm">Supprimer</button>
@@ -109,6 +113,10 @@ export default function Filieres() {
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-gray-900 mb-4">{editing ? 'Modifier' : 'Nouvelle'} filière</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Code</label>
+                <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="ex: GI" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
                 <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
