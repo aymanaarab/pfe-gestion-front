@@ -1,56 +1,93 @@
 import { useState, useEffect } from 'react'
-import { useAuth } from '../../context/AuthContext'
-import { getStudents } from '../../api/students'
-import { getAcademicSupervisors } from '../../api/academicSupervisors'
-import { getInternships } from '../../api/internships'
+import { useNavigate } from 'react-router-dom'
+import { getDashboardStats } from '../../api/dashboard'
+import { internshipDonutData } from '../../lib/charts'
+import { apiError } from '../../lib/format'
+import {
+  StatCard,
+  Card,
+  CardHeader,
+  CardBody,
+  DonutChart,
+  BarChart,
+  SkeletonCard,
+  PageLoader,
+} from '../../components/ui'
+import WelcomeBanner from '../../components/dashboard/WelcomeBanner'
+import TaskProgressCard from '../../components/dashboard/TaskProgressCard'
+import RecentInternships from '../../components/dashboard/RecentInternships'
 
 export default function AdminDashboard() {
-  const { user } = useAuth()
-  const [stats, setStats] = useState({ students: '—', supervisors: '—', internships: '—' })
+  const navigate = useNavigate()
+  const [stats, setStats] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    Promise.all([getStudents(), getAcademicSupervisors(), getInternships()])
-      .then(([sRes, supRes, iRes]) => {
-        const students = sRes.data.data?.totalElements ?? sRes.data.data?.length ?? '—'
-        const supervisors = supRes.data.data?.totalElements ?? supRes.data.data?.length ?? '—'
-        const internships = iRes.data.data?.totalElements ?? iRes.data.data?.length ?? '—'
-        setStats({ students, supervisors, internships })
-      })
-      .catch(() => {})
+    getDashboardStats()
+      .then((res) => setStats(res.data.data))
+      .catch((err) => setError(apiError(err)))
+      .finally(() => setLoading(false))
   }, [])
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="skeleton h-32 rounded-2xl" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+        <PageLoader label="Chargement des statistiques…" />
+      </div>
+    )
+  }
+
+  const counts = stats?.counts || {}
+  const donut = internshipDonutData(stats?.internshipStatusBreakdown)
+  const filiereData = (stats?.studentsPerFiliere || []).map((f) => ({ label: f.name, value: f.count }))
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Bienvenue, {user?.firstName} {user?.lastName}
-        </h1>
-        <p className="text-gray-600 mt-1">Panneau d'administration</p>
+      <WelcomeBanner subtitle="Voici l’état global de la plateforme aujourd’hui." />
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{error}</div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard icon="students" label="Étudiants" value={counts.students || 0} tone="blue" onClick={() => navigate('/admin/students')} />
+        <StatCard icon="encadrants" label="Encadrants" value={counts.supervisors || 0} tone="violet" onClick={() => navigate('/admin/encadrants')} />
+        <StatCard icon="internships" label="Stages" value={counts.internships || 0} tone="brand" onClick={() => navigate('/admin/internships')} />
+        <StatCard icon="companies" label="Entreprises" value={counts.companies || 0} tone="amber" onClick={() => navigate('/admin/companies')} />
       </div>
 
-      <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-        <StatCard title="Étudiants" value={stats.students} color="bg-blue-500"
-          icon="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-        <StatCard title="Encadrants" value={stats.supervisors} color="bg-indigo-500"
-          icon="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" />
-        <StatCard title="Stages" value={stats.internships} color="bg-emerald-500"
-          icon="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-      </div>
-    </div>
-  )
-}
+      <div className="grid gap-6 lg:grid-cols-5">
+        <Card className="lg:col-span-2">
+          <CardHeader title="Répartition des stages" subtitle="Par statut" />
+          <CardBody>
+            {donut.length ? (
+              <DonutChart data={donut} />
+            ) : (
+              <p className="text-sm text-ink-400 text-center py-10">Aucun stage enregistré</p>
+            )}
+          </CardBody>
+        </Card>
 
-function StatCard({ title, value, color, icon }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-lg transition-all duration-300 group">
-      <div className={`${color} group-hover:brightness-110 rounded-t-lg h-32 flex items-center justify-center transition-all duration-300`}>
-        <svg className="w-16 h-16 text-white transition-transform duration-300 group-hover:scale-125 group-hover:rotate-[30deg]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={icon} />
-        </svg>
+        <Card className="lg:col-span-3">
+          <CardHeader title="Étudiants par filière" subtitle={`${counts.filieres || 0} filière(s)`} />
+          <CardBody>
+            <BarChart data={filiereData} />
+          </CardBody>
+        </Card>
       </div>
-      <div className="p-6 text-center">
-        <span className="text-3xl font-bold text-gray-900">{value}</span>
-        <p className="text-sm text-gray-500 mt-1">{title}</p>
+
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-2">
+          <TaskProgressCard progress={stats?.taskProgress} />
+        </div>
+        <div className="lg:col-span-3">
+          <RecentInternships internships={stats?.recentInternships} />
+        </div>
       </div>
     </div>
   )

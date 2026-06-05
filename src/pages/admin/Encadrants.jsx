@@ -1,146 +1,232 @@
-import { useState, useEffect } from 'react'
-import { getAcademicSupervisors, createAcademicSupervisor, deleteAcademicSupervisor } from '../../api/academicSupervisors'
+import { useState, useEffect, useMemo } from 'react'
+import {
+  getAcademicSupervisors,
+  createAcademicSupervisor,
+  updateAcademicSupervisor,
+  deleteAcademicSupervisor,
+} from '../../api/academicSupervisors'
+import { apiError, pagedContent } from '../../lib/format'
+import { Icon } from '../../components/icons'
+import {
+  PageHeader,
+  Button,
+  DataTable,
+  Modal,
+  Field,
+  Input,
+  EmptyState,
+  SearchInput,
+  SkeletonRows,
+  Badge,
+  Avatar,
+  useToast,
+  useConfirm,
+} from '../../components/ui'
+
+const EMPTY = { firstName: '', lastName: '', email: '', phone: '', grade: '', researchTopic: '', password: '' }
 
 export default function Encadrants() {
+  const toast = useToast()
+  const confirm = useConfirm()
   const [supervisors, setSupervisors] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', grade: '', researchTopic: '' })
+  const [query, setQuery] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState(null)
+  const [form, setForm] = useState(EMPTY)
+  const [saving, setSaving] = useState(false)
 
-  const fetchSupervisors = async () => {
-    try {
-      setLoading(true)
-      const res = await getAcademicSupervisors()
-      setSupervisors(res.data.data?.content || res.data.data || [])
-    } catch (err) {
-      setError(err.response?.data?.message || 'Erreur lors du chargement')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const reload = () =>
+    getAcademicSupervisors({ size: 500 })
+      .then((res) => setSupervisors(pagedContent(res).items))
+      .catch((err) => toast.error(apiError(err)))
 
-  useEffect(() => { fetchSupervisors() }, [])
+  useEffect(() => {
+    reload().finally(() => setLoading(false))
+  }, [])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return supervisors
+    return supervisors.filter(
+      (s) =>
+        s.user?.firstName?.toLowerCase().includes(q) ||
+        s.user?.lastName?.toLowerCase().includes(q) ||
+        s.user?.email?.toLowerCase().includes(q) ||
+        s.grade?.toLowerCase().includes(q) ||
+        s.researchTopic?.toLowerCase().includes(q),
+    )
+  }, [supervisors, query])
 
   const openCreate = () => {
-    setForm({ firstName: '', lastName: '', email: '', phone: '', grade: '', researchTopic: '' })
-    setShowModal(true)
+    setEditing(null)
+    setForm(EMPTY)
+    setModalOpen(true)
+  }
+
+  const openEdit = (s) => {
+    setEditing(s)
+    setForm({
+      firstName: s.user?.firstName || '',
+      lastName: s.user?.lastName || '',
+      email: s.user?.email || '',
+      phone: s.user?.phone || '',
+      grade: s.grade || '',
+      researchTopic: s.researchTopic || '',
+      password: '',
+    })
+    setModalOpen(true)
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setSaving(true)
     try {
-      await createAcademicSupervisor(form)
-      setShowModal(false)
-      fetchSupervisors()
+      const payload = { ...form }
+      if (editing) {
+        if (!payload.password) delete payload.password
+        await updateAcademicSupervisor(editing.id, payload)
+        toast.success('Encadrant mis à jour')
+      } else {
+        await createAcademicSupervisor(payload)
+        toast.success('Encadrant créé')
+      }
+      setModalOpen(false)
+      reload()
     } catch (err) {
-      setError(err.response?.data?.message || "Erreur lors de l'enregistrement")
+      toast.error(apiError(err))
+    } finally {
+      setSaving(false)
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Confirmer la suppression ?')) return
+  const handleDelete = async (s) => {
+    const ok = await confirm({
+      title: 'Supprimer l’encadrant',
+      message: `${s.user?.firstName} ${s.user?.lastName} sera supprimé définitivement.`,
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
     try {
-      await deleteAcademicSupervisor(id)
-      fetchSupervisors()
+      await deleteAcademicSupervisor(s.id)
+      toast.success('Encadrant supprimé')
+      reload()
     } catch (err) {
-      setError(err.response?.data?.message || 'Erreur lors de la suppression')
+      toast.error(apiError(err))
     }
   }
 
-  if (loading) return <div className="flex justify-center py-20"><div className="animate-spin w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full" /></div>
+  const columns = [
+    {
+      key: 'name',
+      header: 'Encadrant',
+      render: (s) => (
+        <div className="flex items-center gap-3">
+          <Avatar firstName={s.user?.firstName} lastName={s.user?.lastName} size="sm" />
+          <div className="min-w-0">
+            <p className="font-medium text-ink-900 truncate">{s.user?.firstName} {s.user?.lastName}</p>
+            <p className="text-xs text-ink-500 truncate">{s.user?.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    { key: 'grade', header: 'Grade', render: (s) => s.grade || '—' },
+    {
+      key: 'researchTopic',
+      header: 'Thème de recherche',
+      render: (s) => <span className="text-ink-500 line-clamp-1">{s.researchTopic || '—'}</span>,
+    },
+    {
+      key: 'internshipCount',
+      header: 'Stages',
+      render: (s) => <Badge tone="blue">{s.internshipCount ?? 0}</Badge>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (s) => (
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={() => openEdit(s)} className="p-2 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition" title="Modifier">
+            <Icon name="edit" className="w-4 h-4" />
+          </button>
+          <button onClick={() => handleDelete(s)} className="p-2 rounded-lg text-ink-500 hover:text-red-600 hover:bg-red-50 transition" title="Supprimer">
+            <Icon name="trash" className="w-4 h-4" />
+          </button>
+        </div>
+      ),
+    },
+  ]
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Encadrants Académiques</h1>
-          <p className="text-gray-500 text-sm mt-1">Gestion des encadrants</p>
-        </div>
-        <button onClick={openCreate} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium">+ Nouvel encadrant</button>
-      </div>
+      <PageHeader title="Encadrants académiques" description="Gérez le corps encadrant">
+        <Button icon="plus" onClick={openCreate}>Nouvel encadrant</Button>
+      </PageHeader>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">{error}</div>}
-      {supervisors.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <p className="text-gray-500">Aucun encadrant trouvé</p>
-        </div>
+      <SearchInput value={query} onChange={setQuery} placeholder="Nom, email, grade ou thème…" className="max-w-md" />
+
+      {loading ? (
+        <SkeletonRows />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon="encadrants"
+          title="Aucun encadrant"
+          description={query ? 'Aucun résultat pour cette recherche.' : 'Ajoutez votre premier encadrant.'}
+        />
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="text-start px-4 py-3 font-medium">Nom</th>
-                <th className="text-start px-4 py-3 font-medium">Prénom</th>
-                <th className="text-start px-4 py-3 font-medium">Email</th>
-                <th className="text-start px-4 py-3 font-medium">Grade</th>
-                <th className="text-start px-4 py-3 font-medium">Thème de recherche</th>
-                <th className="text-start px-4 py-3 font-medium">Stages</th>
-                <th className="text-end px-4 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {supervisors.map((s) => (
-                <tr key={s.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{s.user?.lastName}</td>
-                  <td className="px-4 py-3 text-gray-700">{s.user?.firstName}</td>
-                  <td className="px-4 py-3 text-gray-500">{s.user?.email}</td>
-                  <td className="px-4 py-3 text-gray-500">{s.grade || '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">{s.researchTopic || '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">{s.internshipCount ?? '—'}</td>
-                  <td className="px-4 py-3 text-end">
-                    <button onClick={() => handleDelete(s.id)} className="text-red-600 hover:text-red-800 text-sm">Supprimer</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable columns={columns} rows={filtered} />
       )}
 
-      {showModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Nouvel encadrant</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Prénom</label>
-                  <input required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
-                  <input required value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
-                  <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
-                  <input value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} placeholder="Professeur" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Thème de recherche</label>
-                  <input value={form.researchTopic} onChange={(e) => setForm({ ...form, researchTopic: e.target.value })} placeholder="Intelligence Artificielle" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Annuler</button>
-                <button type="submit" className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">Créer</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editing ? 'Modifier l’encadrant' : 'Nouvel encadrant'}
+        subtitle="Coordonnées et profil académique"
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>Annuler</Button>
+            <Button type="submit" form="encadrant-form" loading={saving}>{editing ? 'Enregistrer' : 'Créer'}</Button>
+          </>
+        }
+      >
+        <form id="encadrant-form" onSubmit={handleSubmit} className="grid sm:grid-cols-2 gap-4">
+          <Field label="Prénom" required>
+            <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required />
+          </Field>
+          <Field label="Nom" required>
+            <Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} required />
+          </Field>
+          <Field label="Email" required>
+            <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+          </Field>
+          <Field label="Téléphone">
+            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          </Field>
+          <Field label="Grade" required>
+            <Input value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} placeholder="Professeur" required />
+          </Field>
+          <Field label="Thème de recherche">
+            <Input value={form.researchTopic} onChange={(e) => setForm({ ...form, researchTopic: e.target.value })} placeholder="Intelligence Artificielle" />
+          </Field>
+          <Field
+            label={editing ? 'Nouveau mot de passe' : 'Mot de passe'}
+            required={!editing}
+            hint={editing ? 'Laisser vide pour conserver le mot de passe actuel' : 'Minimum 8 caractères'}
+            className="sm:col-span-2"
+          >
+            <Input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              required={!editing}
+              minLength={8}
+              autoComplete="new-password"
+            />
+          </Field>
+        </form>
+      </Modal>
     </div>
   )
 }

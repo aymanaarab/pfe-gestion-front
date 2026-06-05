@@ -8,3 +8,5 @@ export const register = (data) =>
 
 export const refreshToken = (refreshToken) =>
   api.post('/auth/refresh-token', { refreshToken })
+
+export const getMe = () => api.get('/auth/me')

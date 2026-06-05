@@ -1,32 +1,22 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
+import Topbar from '../components/Topbar'
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { pathname } = useLocation()
 
   return (
-    <div className="min-h-screen bg-slate-200 flex">
-      <Sidebar
-        mobileOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen((p) => !p)}
-      />
+    <div className="min-h-dvh app-shell-bg flex">
+      <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="lg:hidden flex items-center justify-between px-4 h-14 bg-white border-b border-gray-200">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-gray-600"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-            </svg>
-          </button>
-          <img src="/semlalia-logo-rbg.png" alt="Logo" className="h-8 w-auto" />
-        </header>
-
-        <main className="flex-1 p-6 lg:p-8 overflow-auto">
-          <Outlet />
+        <Topbar onMenu={() => setSidebarOpen(true)} />
+        <main key={pathname} className="flex-1 p-4 sm:p-6 lg:p-8 animate-fade-in">
+          <div className="mx-auto max-w-7xl">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

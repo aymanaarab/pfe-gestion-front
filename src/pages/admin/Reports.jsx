@@ -1,57 +1,131 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { getInternshipReport, getStudentReport } from '../../api/reports'
+import { getInternships } from '../../api/internships'
+import { getStudents } from '../../api/students'
+import { apiError, pagedContent, fullName } from '../../lib/format'
+import { Icon } from '../../components/icons'
+import {
+  PageHeader,
+  Card,
+  CardBody,
+  Button,
+  Field,
+  Select,
+  useToast,
+} from '../../components/ui'
 
 export default function Reports() {
+  const toast = useToast()
+  const [internships, setInternships] = useState([])
+  const [students, setStudents] = useState([])
   const [internshipId, setInternshipId] = useState('')
   const [studentId, setStudentId] = useState('')
-  const [loading, setLoading] = useState(null)
-  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(null)
 
-  const downloadReport = async (type, id, endpoint) => {
-    if (!id.trim()) return
-    setLoading(type)
-    setError(null)
+  useEffect(() => {
+    Promise.all([getInternships({ size: 500 }), getStudents({ size: 500 })])
+      .then(([iRes, sRes]) => {
+        setInternships(pagedContent(iRes).items)
+        setStudents(pagedContent(sRes).items)
+      })
+      .catch((err) => toast.error(apiError(err)))
+  }, [])
+
+  const openPdf = async (key, id, endpoint) => {
+    if (!id) return
+    setBusy(key)
     try {
-      const res = await endpoint(id.trim())
+      const res = await endpoint(id)
       const blob = new Blob([res.data], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
       window.open(url, '_blank')
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      toast.success('Rapport généré')
     } catch {
-      setError(`Impossible de générer le rapport pour ${type === 'internship' ? 'le stage' : 'l\'étudiant'}`)
+      toast.error('Impossible de générer le rapport')
     } finally {
-      setLoading(null)
+      setBusy(null)
     }
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Rapports</h1>
-      {error && <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">{error}</div>}
+      <PageHeader title="Rapports" description="Générez les documents PDF officiels" />
 
       <div className="grid gap-6 md:grid-cols-2">
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Rapport de stage</h2>
-          <p className="text-sm text-gray-500 mb-4">Générer le rapport PDF d'un stage par son ID</p>
-          <div className="flex gap-2">
-            <input value={internshipId} onChange={(e) => setInternshipId(e.target.value)} placeholder="ID du stage" className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
-            <button onClick={() => downloadReport('internship', internshipId, getInternshipReport)} disabled={loading === 'internship'} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-60">
-              {loading === 'internship' ? '...' : 'Générer'}
-            </button>
-          </div>
-        </div>
+        <Card>
+          <CardBody className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center">
+                <Icon name="internships" className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-display font-semibold text-ink-900">Rapport de stage</h2>
+                <p className="text-sm text-ink-500">Fiche complète d’un stage PFE</p>
+              </div>
+            </div>
+            <Field label="Stage">
+              <Select value={internshipId} onChange={(e) => setInternshipId(e.target.value)}>
+                <option value="">Sélectionner un stage…</option>
+                {internships.map((it) => (
+                  <option key={it.id} value={it.id}>{fullName(it.student)} — {it.subject}</option>
+                ))}
+              </Select>
+            </Field>
+            <Button
+              icon="download"
+              className="w-full"
+              disabled={!internshipId}
+              loading={busy === 'internship'}
+              onClick={() => openPdf('internship', internshipId, getInternshipReport)}
+            >
+              Générer le rapport
+            </Button>
+          </CardBody>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Rapport étudiant</h2>
-          <p className="text-sm text-gray-500 mb-4">Générer le rapport PDF d'un étudiant par son ID</p>
-          <div className="flex gap-2">
-            <input value={studentId} onChange={(e) => setStudentId(e.target.value)} placeholder="ID de l'étudiant" className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
-            <button onClick={() => downloadReport('student', studentId, getStudentReport)} disabled={loading === 'student'} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-60">
-              {loading === 'student' ? '...' : 'Générer'}
-            </button>
-          </div>
-        </div>
+        <Card>
+          <CardBody className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Icon name="students" className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-display font-semibold text-ink-900">Rapport étudiant</h2>
+                <p className="text-sm text-ink-500">Dossier individuel d’un étudiant</p>
+              </div>
+            </div>
+            <Field label="Étudiant">
+              <Select value={studentId} onChange={(e) => setStudentId(e.target.value)}>
+                <option value="">Sélectionner un étudiant…</option>
+                {students.map((s) => (
+                  <option key={s.id} value={s.id}>{s.user?.firstName} {s.user?.lastName} ({s.cne})</option>
+                ))}
+              </Select>
+            </Field>
+            <Button
+              icon="download"
+              variant="secondary"
+              className="w-full"
+              disabled={!studentId}
+              loading={busy === 'student'}
+              onClick={() => openPdf('student', studentId, getStudentReport)}
+            >
+              Générer le rapport
+            </Button>
+          </CardBody>
+        </Card>
       </div>
+
+      <Card>
+        <CardBody className="flex items-start gap-3">
+          <Icon name="info" className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
+          <p className="text-sm text-ink-600">
+            Les rapports sont générés au format PDF et s’ouvrent dans un nouvel onglet. Assurez-vous
+            d’autoriser les fenêtres contextuelles pour ce site.
+          </p>
+        </CardBody>
+      </Card>
     </div>
   )
 }

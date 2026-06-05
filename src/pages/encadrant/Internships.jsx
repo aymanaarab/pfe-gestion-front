@@ -1,38 +1,67 @@
-import { useAuth } from '../../context/AuthContext'
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { getDashboardStats } from '../../api/dashboard'
+import { apiError, fullName, INTERNSHIP_STATUS, INTERNSHIP_STATUS_ORDER } from '../../lib/format'
+import { PageHeader, SearchInput, Select, EmptyState, PageLoader } from '../../components/ui'
+import InternshipCard from '../../components/internship/InternshipCard'
 
 export default function EncadrantInternships() {
-  const { user } = useAuth()
+  const navigate = useNavigate()
+  const [internships, setInternships] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+
+  useEffect(() => {
+    getDashboardStats()
+      .then((res) => setInternships(res.data.data?.supervisedInternships || []))
+      .catch((err) => setError(apiError(err)))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return internships.filter((it) => {
+      const matchQ =
+        !q ||
+        it.subject?.toLowerCase().includes(q) ||
+        fullName(it.student).toLowerCase().includes(q) ||
+        it.company?.name?.toLowerCase().includes(q)
+      const matchS = !statusFilter || it.status === statusFilter
+      return matchQ && matchS
+    })
+  }, [internships, query, statusFilter])
+
+  if (loading) return <PageLoader />
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Bienvenue, {user?.firstName} {user?.lastName}
-        </h1>
-        <p className="text-gray-600 mt-1">Encadrant Académique</p>
+      <PageHeader title="Mes stages" description="Stages dont vous êtes l’encadrant académique" />
+
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{error}</div>}
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <SearchInput value={query} onChange={setQuery} placeholder="Sujet, étudiant ou entreprise…" className="flex-1 max-w-md" />
+        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="sm:w-52">
+          <option value="">Tous les statuts</option>
+          {INTERNSHIP_STATUS_ORDER.map((s) => <option key={s} value={s}>{INTERNSHIP_STATUS[s].label}</option>)}
+        </Select>
       </div>
 
-      <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-        <StatCard title="Stages Encadrés" value="—" color="bg-emerald-500" />
-        <StatCard title="Tâches" value="—" color="bg-orange-500" />
-        <StatCard title="Rapports" value="—" color="bg-blue-500" />
-      </div>
-    </div>
-  )
-}
-
-function StatCard({ title, value, color }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-lg transition-all duration-300 group">
-      <div className={`${color} group-hover:brightness-110 rounded-t-lg h-32 flex items-center justify-center transition-all duration-300`}>
-        <svg className="w-16 h-16 text-white transition-transform duration-300 group-hover:scale-125" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-        </svg>
-      </div>
-      <div className="p-6 text-center">
-        <span className="text-3xl font-bold text-gray-900">{value}</span>
-        <p className="text-sm text-gray-500 mt-1">{title}</p>
-      </div>
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon="internships"
+          title="Aucun stage"
+          description={query || statusFilter ? 'Aucun résultat pour ces critères.' : 'Aucun stage ne vous est encore affecté.'}
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((it) => (
+            <InternshipCard key={it.id} internship={it} onClick={() => navigate(`/encadrant/internships/${it.id}`)} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

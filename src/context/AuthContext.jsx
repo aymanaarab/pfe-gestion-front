@@ -1,49 +1,65 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react'
-import { login as loginApi } from '../api/auth'
+import { useState, useCallback, useMemo, useEffect } from 'react'
+import { login as loginApi, getMe } from '../api/auth'
+import { ROLE_HOME } from '../lib/nav'
+import { AuthContext } from './auth-context'
 
-const AuthContext = createContext(null)
-
-const ROLE_ROUTES = {
-  ADMIN: '/admin/dashboard',
-  RESPONSABLE_FILIERE: '/responsable/dashboard',
-  ENCADRANT_ACADEMIQUE: '/encadrant/internships',
-  ETUDIANT: '/etudiant/internship',
+function readStoredUser() {
+  const stored = localStorage.getItem('user')
+  return stored ? JSON.parse(stored) : null
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem('user')
-    return stored ? JSON.parse(stored) : null
-  })
+  const [user, setUser] = useState(readStoredUser)
   const [loading, setLoading] = useState(false)
 
-  const login = useCallback(async (email, password) => {
-    setLoading(true)
-    try {
-      const { data } = await loginApi(email, password)
-
-      if (!data.success) {
-        throw new Error(data.message || 'Email ou mot de passe incorrect')
-      }
-
-      const { accessToken, refreshToken, ...userData } = data.data
-
-      localStorage.setItem('accessToken', accessToken)
-      localStorage.setItem('refreshToken', refreshToken)
-      localStorage.setItem('user', JSON.stringify(userData))
-
-      setUser(userData)
-      return ROLE_ROUTES[userData.role] || '/'
-    } catch (err) {
-      throw new Error(
-        err.response?.data?.message ||
-          err.message ||
-          'Erreur de connexion au serveur',
-      )
-    } finally {
-      setLoading(false)
-    }
+  const persist = useCallback((data) => {
+    localStorage.setItem('user', JSON.stringify(data))
+    setUser(data)
   }, [])
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken')
+    if (!token || !readStoredUser()) return
+    getMe()
+      .then((res) => {
+        if (res.data?.data) {
+          persist({ ...readStoredUser(), ...res.data.data })
+        }
+      })
+      .catch(() => {})
+  }, [persist])
+
+  const login = useCallback(
+    async (email, password) => {
+      setLoading(true)
+      try {
+        const { data } = await loginApi(email, password)
+        if (!data.success) {
+          throw new Error(data.message || 'Email ou mot de passe incorrect')
+        }
+
+        const { accessToken, refreshToken, ...userData } = data.data
+        localStorage.setItem('accessToken', accessToken)
+        localStorage.setItem('refreshToken', refreshToken)
+        persist(userData)
+
+        const me = await getMe().catch(() => null)
+        if (me?.data?.data) {
+          persist({ ...userData, ...me.data.data })
+        }
+
+        return ROLE_HOME[userData.role] || '/'
+      } catch (err) {
+        throw new Error(
+          err.response?.data?.message || err.message || 'Erreur de connexion au serveur',
+          { cause: err },
+        )
+      } finally {
+        setLoading(false)
+      }
+    },
+    [persist],
+  )
 
   const logout = useCallback(() => {
     localStorage.clear()
@@ -57,10 +73,4 @@ export function AuthProvider({ children }) {
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export const useAuth = () => {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
 }
