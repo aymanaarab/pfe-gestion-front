@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { getFilieres, createFiliere, updateFiliere, deleteFiliere } from '../../api/filieres'
+import { getFilieres, createFiliere, updateFiliere, deleteFiliere, assignResponsable } from '../../api/filieres'
+import { getAcademicSupervisors } from '../../api/academicSupervisors'
 import { apiError, fullName, pagedContent } from '../../lib/format'
 import { Icon } from '../../components/icons'
 import {
@@ -10,6 +11,7 @@ import {
   Field,
   Input,
   Textarea,
+  Select,
   EmptyState,
   SearchInput,
   SkeletonRows,
@@ -18,12 +20,13 @@ import {
   useConfirm,
 } from '../../components/ui'
 
-const EMPTY = { code: '', name: '', description: '' }
+const EMPTY = { code: '', name: '', description: '', responsableId: '' }
 
 export default function Filieres() {
   const toast = useToast()
   const confirm = useConfirm()
   const [filieres, setFilieres] = useState([])
+  const [responsables, setResponsables] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
@@ -37,7 +40,12 @@ export default function Filieres() {
       .catch((err) => toast.error(apiError(err)))
 
   useEffect(() => {
-    reload().finally(() => setLoading(false))
+    Promise.all([
+      reload(),
+      getAcademicSupervisors({ size: 200 })
+        .then((res) => setResponsables(pagedContent(res).items))
+        .catch(() => {}),
+    ]).finally(() => setLoading(false))
   }, [])
 
   const filtered = useMemo(() => {
@@ -59,7 +67,7 @@ export default function Filieres() {
 
   const openEdit = (f) => {
     setEditing(f)
-    setForm({ code: f.code, name: f.name, description: f.description || '' })
+    setForm({ code: f.code, name: f.name, description: f.description || '', responsableId: f.responsable?.id ? String(f.responsable.id) : '' })
     setModalOpen(true)
   }
 
@@ -67,13 +75,23 @@ export default function Filieres() {
     e.preventDefault()
     setSaving(true)
     try {
+      const { responsableId, ...data } = form
+      let filiereId
+
       if (editing) {
-        await updateFiliere(editing.id, form)
+        await updateFiliere(editing.id, data)
+        filiereId = editing.id
         toast.success('Filière mise à jour')
       } else {
-        await createFiliere(form)
+        const res = await createFiliere(data)
+        filiereId = res.data.data?.id || res.data.id
         toast.success('Filière créée')
       }
+
+      if (responsableId && responsableId !== String(editing?.responsable?.id ?? '')) {
+        await assignResponsable(filiereId, parseInt(responsableId, 10))
+      }
+
       setModalOpen(false)
       reload()
     } catch (err) {
@@ -177,6 +195,14 @@ export default function Filieres() {
           </Field>
           <Field label="Description">
             <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} placeholder="Brève description de la filière" />
+          </Field>
+          <Field label="Responsable de filière">
+            <Select value={form.responsableId} onChange={(e) => setForm({ ...form, responsableId: e.target.value })}>
+              <option value="">Non assigné</option>
+              {responsables.map((u) => (
+                <option key={u.id} value={u.id}>{fullName(u)}</option>
+              ))}
+            </Select>
           </Field>
         </form>
       </Modal>

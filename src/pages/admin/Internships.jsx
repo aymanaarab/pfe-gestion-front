@@ -1,18 +1,18 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   getInternships,
+  getInternship,
   createInternship,
   updateInternship,
   deleteInternship,
   updateInternshipStatus,
   assignCompany,
   assignAcademicSupervisor,
-  assignProfessionalSupervisor,
 } from '../../api/internships'
 import { getStudents } from '../../api/students'
 import { getCompanies } from '../../api/companies'
 import { getAcademicSupervisors } from '../../api/academicSupervisors'
-import { getProfessionalSupervisors } from '../../api/professionalSupervisors'
+
 import { apiError, pagedContent, fullName, formatDate, durationLabel, INTERNSHIP_STATUS, INTERNSHIP_STATUS_ORDER } from '../../lib/format'
 import { Icon } from '../../components/icons'
 import {
@@ -47,7 +47,11 @@ const EMPTY = {
   studentId: '',
   companyId: '',
   academicSupervisorId: '',
-  professionalSupervisorId: '',
+  profSupFirstName: '',
+  profSupLastName: '',
+  profSupEmail: '',
+  profSupPosition: '',
+  profSupPhone: '',
 }
 
 export default function Internships() {
@@ -57,7 +61,7 @@ export default function Internships() {
   const [students, setStudents] = useState([])
   const [companies, setCompanies] = useState([])
   const [supervisors, setSupervisors] = useState([])
-  const [proSupervisors, setProSupervisors] = useState([])
+
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -69,6 +73,19 @@ export default function Internships() {
   const [saving, setSaving] = useState(false)
 
   const [detail, setDetail] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  const openDetail = useCallback(async (it) => {
+    setDetailLoading(true)
+    try {
+      const res = await getInternship(it.id)
+      setDetail(res.data.data)
+    } catch {
+      setDetail(it)
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [])
 
   const reload = () =>
     Promise.all([
@@ -76,14 +93,12 @@ export default function Internships() {
       getStudents({ size: 500 }),
       getCompanies({ size: 500 }),
       getAcademicSupervisors({ size: 500 }),
-      getProfessionalSupervisors({ size: 500 }),
     ])
-      .then(([iRes, sRes, cRes, supRes, proRes]) => {
+      .then(([iRes, sRes, cRes, supRes]) => {
         setInternships(pagedContent(iRes).items)
         setStudents(pagedContent(sRes).items)
         setCompanies(pagedContent(cRes).items)
         setSupervisors(pagedContent(supRes).items)
-        setProSupervisors(pagedContent(proRes).items)
       })
       .catch((err) => toast.error(apiError(err)))
 
@@ -133,7 +148,11 @@ export default function Internships() {
       studentId: it.student?.id ? String(it.student.id) : '',
       companyId: it.company?.id ? String(it.company.id) : '',
       academicSupervisorId: it.academicSupervisor?.id ? String(it.academicSupervisor.id) : '',
-      professionalSupervisorId: it.professionalSupervisor?.id ? String(it.professionalSupervisor.id) : '',
+      profSupFirstName: it.professionalSupervisor?.firstName || '',
+      profSupLastName: it.professionalSupervisor?.lastName || '',
+      profSupEmail: it.professionalSupervisor?.email || '',
+      profSupPosition: it.professionalSupervisor?.position || '',
+      profSupPhone: it.professionalSupervisor?.phone || '',
     })
     setFormOpen(true)
   }
@@ -148,12 +167,24 @@ export default function Internships() {
     }
     setSaving(true)
     try {
+      const professionalSupervisor = form.profSupFirstName || form.profSupLastName ? {
+        firstName: form.profSupFirstName,
+        lastName: form.profSupLastName,
+        email: form.profSupEmail || undefined,
+        position: form.profSupPosition || undefined,
+        phone: form.profSupPhone || undefined,
+      } : undefined
       const payload = {
         ...form,
         studentId: toId(form.studentId),
         companyId: toId(form.companyId),
         academicSupervisorId: toId(form.academicSupervisorId),
-        professionalSupervisorId: toId(form.professionalSupervisorId),
+        professionalSupervisor,
+        profSupFirstName: undefined,
+        profSupLastName: undefined,
+        profSupEmail: undefined,
+        profSupPosition: undefined,
+        profSupPhone: undefined,
       }
       if (editing) {
         await updateInternship(editing.id, payload)
@@ -172,12 +203,15 @@ export default function Internships() {
   }
 
   const handleDelete = async (it) => {
+    console.log('[delete] called with', it?.id, it?.subject)
     const ok = await confirm({
       title: 'Supprimer le stage',
       message: `Le stage « ${it.subject} » sera supprimé définitivement.`,
       confirmLabel: 'Supprimer',
     })
+    console.log('[delete] confirm result', ok)
     if (!ok) return
+    console.log('[delete] about to call deleteInternship with id', it.id)
     try {
       await deleteInternship(it.id)
       toast.success('Stage supprimé')
@@ -233,13 +267,13 @@ export default function Internships() {
       align: 'right',
       render: (it) => (
         <div className="flex items-center justify-end gap-1">
-          <button onClick={() => setDetail(it)} className="p-2 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition" title="Détails">
+          <button onClick={(e) => { e.stopPropagation(); openDetail(it) }} className="p-2 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition" title="Détails">
             <Icon name="external-link" className="w-4 h-4" />
           </button>
-          <button onClick={() => openEdit(it)} className="p-2 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition" title="Modifier">
+          <button onClick={(e) => { e.stopPropagation(); openEdit(it) }} className="p-2 rounded-lg text-ink-500 hover:text-brand-700 hover:bg-brand-50 transition" title="Modifier">
             <Icon name="edit" className="w-4 h-4" />
           </button>
-          <button onClick={() => handleDelete(it)} className="p-2 rounded-lg text-ink-500 hover:text-red-600 hover:bg-red-50 transition" title="Supprimer">
+          <button onClick={(e) => { e.stopPropagation(); handleDelete(it) }} className="p-2 rounded-lg text-ink-500 hover:text-red-600 hover:bg-red-50 transition" title="Supprimer">
             <Icon name="trash" className="w-4 h-4" />
           </button>
         </div>
@@ -273,7 +307,7 @@ export default function Internships() {
         />
       ) : (
         <>
-          <DataTable columns={columns} rows={pageItems} onRowClick={setDetail} />
+          <DataTable columns={columns} rows={pageItems} onRowClick={openDetail} />
           <Pagination page={safePage} totalPages={totalPages} onPage={setPage} totalElements={filtered.length} />
         </>
       )}
@@ -283,7 +317,7 @@ export default function Internships() {
         onClose={() => setFormOpen(false)}
         title={editing ? 'Modifier le stage' : 'Nouveau stage'}
         subtitle="Sujet, planning et affectations"
-        size="xl"
+        size="lg"
         footer={
           <>
             <Button variant="secondary" onClick={() => setFormOpen(false)}>Annuler</Button>
@@ -347,28 +381,43 @@ export default function Internships() {
                 {supervisors.map((s) => <option key={s.id} value={s.id}>{s.user?.firstName} {s.user?.lastName}</option>)}
               </Select>
             </Field>
-            <Field label="Encadrant professionnel">
-              <Select value={form.professionalSupervisorId} onChange={(e) => setForm({ ...form, professionalSupervisorId: e.target.value })}>
-                <option value="">—</option>
-                {proSupervisors.map((s) => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
-              </Select>
-            </Field>
+            <fieldset className="sm:col-span-3 border border-ink-200 rounded-lg p-4 space-y-3">
+              <legend className="text-xs font-semibold uppercase tracking-wide text-ink-400 px-1">Encadrant professionnel (facultatif)</legend>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Field label="Prénom">
+                  <Input value={form.profSupFirstName} onChange={(e) => setForm({ ...form, profSupFirstName: e.target.value })} />
+                </Field>
+                <Field label="Nom">
+                  <Input value={form.profSupLastName} onChange={(e) => setForm({ ...form, profSupLastName: e.target.value })} />
+                </Field>
+              </div>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <Field label="Email">
+                  <Input type="email" value={form.profSupEmail} onChange={(e) => setForm({ ...form, profSupEmail: e.target.value })} />
+                </Field>
+                <Field label="Poste">
+                  <Input value={form.profSupPosition} onChange={(e) => setForm({ ...form, profSupPosition: e.target.value })} />
+                </Field>
+                <Field label="Téléphone">
+                  <Input value={form.profSupPhone} onChange={(e) => setForm({ ...form, profSupPhone: e.target.value })} />
+                </Field>
+              </div>
+            </fieldset>
           </div>
         </form>
       </Modal>
 
       <InternshipDetailModal
         internship={detail}
+        loading={detailLoading}
         onClose={() => setDetail(null)}
         companies={companies}
         supervisors={supervisors}
-        proSupervisors={proSupervisors}
         onEdit={(it) => { setDetail(null); openEdit(it) }}
         onDelete={handleDelete}
         onStatus={(it, status) => applyChange(() => updateInternshipStatus(it.id, status), 'Statut mis à jour')}
         onCompany={(it, id) => applyChange(() => assignCompany(it.id, id), 'Entreprise affectée')}
         onSupervisor={(it, id) => applyChange(() => assignAcademicSupervisor(it.id, id), 'Encadrant affecté')}
-        onProSupervisor={(it, id) => applyChange(() => assignProfessionalSupervisor(it.id, id), 'Encadrant pro affecté')}
       />
     </div>
   )
@@ -390,16 +439,15 @@ function InfoRow({ icon, label, value }) {
 
 function InternshipDetailModal({
   internship,
+  loading,
   onClose,
   companies,
   supervisors,
-  proSupervisors,
   onEdit,
   onDelete,
   onStatus,
   onCompany,
   onSupervisor,
-  onProSupervisor,
 }) {
   const it = internship
   return (
@@ -408,7 +456,7 @@ function InternshipDetailModal({
       onClose={onClose}
       title={it?.subject}
       subtitle={it ? `${fullName(it.student)} · ${it.student?.cne || ''}` : ''}
-      size="xl"
+      size="lg"
       footer={
         it && (
           <>
@@ -419,7 +467,11 @@ function InternshipDetailModal({
         )
       }
     >
-      {it && (
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <div className="animate-spin w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full" />
+        </div>
+      ) : it && (
         <div className="space-y-6">
           <div className="flex items-center gap-3">
             <InternshipStatusBadge status={it.status} />
@@ -431,7 +483,6 @@ function InternshipDetailModal({
           <div className="grid sm:grid-cols-2 gap-4">
             <InfoRow icon="companies" label="Entreprise" value={it.company?.name} />
             <InfoRow icon="encadrants" label="Encadrant académique" value={it.academicSupervisor ? fullName(it.academicSupervisor) : null} />
-            <InfoRow icon="user" label="Encadrant professionnel" value={it.professionalSupervisor ? `${it.professionalSupervisor.firstName} ${it.professionalSupervisor.lastName}` : null} />
             <InfoRow icon="calendar" label="Période" value={`${formatDate(it.startDate)} → ${formatDate(it.endDate)}`} />
             <InfoRow icon="clock" label="Durée" value={durationLabel(it.startDate, it.endDate)} />
             <InfoRow icon="layers" label="Technologies" value={it.technologies} />
@@ -444,6 +495,16 @@ function InternshipDetailModal({
               {it.methodology && <DetailBlock label="Méthodologie" text={it.methodology} />}
             </div>
           )}
+
+          <div className="border-t border-ink-100 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-400 mb-3">Encadrant professionnel</p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <InfoRow icon="user" label="Nom complet" value={it.professionalSupervisor ? `${it.professionalSupervisor.firstName} ${it.professionalSupervisor.lastName}` : null} />
+              <InfoRow icon="mail" label="Email" value={it.professionalSupervisor?.email} />
+              <InfoRow icon="briefcase" label="Poste" value={it.professionalSupervisor?.position} />
+              <InfoRow icon="phone" label="Téléphone" value={it.professionalSupervisor?.phone} />
+            </div>
+          </div>
 
           <div className="border-t border-ink-100 pt-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-400 mb-3">Gestion rapide</p>
@@ -463,12 +524,6 @@ function InternshipDetailModal({
                 <Select value={it.academicSupervisor?.id || ''} onChange={(e) => e.target.value && onSupervisor(it, e.target.value)}>
                   <option value="">Affecter…</option>
                   {supervisors.map((s) => <option key={s.id} value={s.id}>{s.user?.firstName} {s.user?.lastName}</option>)}
-                </Select>
-              </Field>
-              <Field label="Encadrant professionnel">
-                <Select value={it.professionalSupervisor?.id || ''} onChange={(e) => e.target.value && onProSupervisor(it, e.target.value)}>
-                  <option value="">Affecter…</option>
-                  {proSupervisors.map((s) => <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>)}
                 </Select>
               </Field>
             </div>
