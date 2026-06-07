@@ -7,6 +7,7 @@ import { ROLE_HOME } from '../lib/nav'
 
 import AdminDashboard from '../pages/admin/Dashboard'
 import AdminFilieres from '../pages/admin/Filieres'
+import AdminResponsables from '../pages/admin/Responsables'
 import AdminStudents from '../pages/admin/Students'
 import AdminEncadrants from '../pages/admin/Encadrants'
 import AdminInternships from '../pages/admin/Internships'
@@ -47,6 +48,7 @@ export default function AppRoutes() {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="filieres" element={<AdminFilieres />} />
+        <Route path="responsables" element={<AdminResponsables />} />
         <Route path="students" element={<AdminStudents />} />
         <Route path="encadrants" element={<AdminEncadrants />} />
         <Route path="internships" element={<AdminInternships />} />

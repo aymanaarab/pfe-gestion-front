@@ -34,8 +34,8 @@ export default function AdminDashboard() {
     return (
       <div className="space-y-6">
         <div className="skeleton h-32 rounded-2xl" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
         <PageLoader label="Chargement des statistiques…" />
       </div>
@@ -54,11 +54,12 @@ export default function AdminDashboard() {
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{error}</div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard icon="students" label="Étudiants" value={counts.students || 0} tone="blue" onClick={() => navigate('/admin/students')} />
         <StatCard icon="encadrants" label="Encadrants" value={counts.supervisors || 0} tone="violet" onClick={() => navigate('/admin/encadrants')} />
         <StatCard icon="internships" label="Stages" value={counts.internships || 0} tone="brand" onClick={() => navigate('/admin/internships')} />
         <StatCard icon="companies" label="Entreprises" value={counts.companies || 0} tone="amber" onClick={() => navigate('/admin/companies')} />
+        <StatCard icon="user" label="Responsables" value={counts.responsables || 0} tone="green" onClick={() => navigate('/admin/responsables')} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-5">

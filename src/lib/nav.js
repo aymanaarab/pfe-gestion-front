@@ -2,6 +2,7 @@ export const NAV = {
   ADMIN: [
     { label: 'Tableau de bord', icon: 'dashboard', to: '/admin/dashboard' },
     { label: 'Filières', icon: 'filieres', to: '/admin/filieres' },
+    { label: 'Responsables', icon: 'user', to: '/admin/responsables' },
     { label: 'Étudiants', icon: 'students', to: '/admin/students' },
     { label: 'Encadrants', icon: 'encadrants', to: '/admin/encadrants' },
     { label: 'Stages', icon: 'internships', to: '/admin/internships' },

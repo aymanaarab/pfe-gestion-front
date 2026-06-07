@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { getFilieres, createFiliere, updateFiliere, deleteFiliere, assignResponsable } from '../../api/filieres'
-import { getAcademicSupervisors } from '../../api/academicSupervisors'
+import { getFilieres, createFiliere, updateFiliere, deleteFiliere, assignResponsable, unassignResponsable } from '../../api/filieres'
+import { getUsersByRole } from '../../api/users'
 import { apiError, fullName, pagedContent } from '../../lib/format'
 import { Icon } from '../../components/icons'
 import {
@@ -42,7 +42,7 @@ export default function Filieres() {
   useEffect(() => {
     Promise.all([
       reload(),
-      getAcademicSupervisors({ size: 200 })
+      getUsersByRole('RESPONSABLE_FILIERE')
         .then((res) => setResponsables(pagedContent(res).items))
         .catch(() => {}),
     ]).finally(() => setLoading(false))
@@ -67,7 +67,7 @@ export default function Filieres() {
 
   const openEdit = (f) => {
     setEditing(f)
-    setForm({ code: f.code, name: f.name, description: f.description || '', responsableId: f.responsable?.id ? String(f.responsable.id) : '' })
+    setForm({ code: f.code, name: f.name, description: f.description || '', responsableId: f.responsable?.user?.id ? String(f.responsable.user.id) : '' })
     setModalOpen(true)
   }
 
@@ -88,8 +88,13 @@ export default function Filieres() {
         toast.success('Filière créée')
       }
 
-      if (responsableId && responsableId !== String(editing?.responsable?.id ?? '')) {
-        await assignResponsable(filiereId, parseInt(responsableId, 10))
+      const currentUserId = editing?.responsable?.user?.id
+      if (responsableId) {
+        if (responsableId !== String(currentUserId ?? '')) {
+          await assignResponsable(filiereId, parseInt(responsableId, 10))
+        }
+      } else if (currentUserId) {
+        await unassignResponsable(filiereId)
       }
 
       setModalOpen(false)

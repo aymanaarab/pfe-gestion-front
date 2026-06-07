@@ -6,5 +6,7 @@ export const getFilieres = (params) => api.get('/filieres', { params })
 export const searchFilieres = (params) => api.get('/filieres/search', { params })
 export const updateFiliere = (id, data) => api.put(`/filieres/${id}`, data)
 export const deleteFiliere = (id) => api.delete(`/filieres/${id}`)
-export const assignResponsable = (filiereId, responsableId) =>
-  api.put(`/filieres/${filiereId}/responsable/${responsableId}`)
+export const assignResponsable = (filiereId, userId) =>
+  api.put(`/filieres/${filiereId}/responsable/${userId}`)
+export const unassignResponsable = (filiereId) =>
+  api.delete(`/filieres/${filiereId}/responsable`)
